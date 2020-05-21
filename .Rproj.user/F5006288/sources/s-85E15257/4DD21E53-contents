@@ -7,7 +7,9 @@ library(dplyr)
 library(stringr)
 library(drake)
 
-# 1. import data files
+# 1. import data files ----
+
+# list all xlsx files in the target directory, and then read and collate them
 FILEPATH = "data/date1-data/"
 filePaths <- list.files(path = FILEPATH,pattern = "*.xlsx", full.names = TRUE)
 
@@ -22,8 +24,12 @@ data <- do.call(rbind, lapply(filePaths, function(path) {
 
     # if importing only single file, use this instead:
     # data = read_excel("data/FILE-NAME.xlsx")
-    
-    # melt/gather the dataset
+
+#    
+# 2. clean data files ----
+
+# the data are currently arranged as a matrix of letters vs. numbers (96 well plate)
+# melt all the numbers into a single column
 
 data_melt  = 
     data %>% 
@@ -31,27 +37,28 @@ data_melt  =
     reshape2::melt(id = c("letter", "file"),
                  variable.name = "num",
                  value.name = "val") %>% 
-
-#  tidyr::gather(num, val, 2:13) %>% 
-#  rename(letter = `...1`) %>% 
-  dplyr::mutate(Source = paste0(letter, num),
+# clean the `file` column. remove unnecessary strings of text
+    dplyr::mutate(Source = paste0(letter, num),
                 file = str_replace_all(file, paste0(FILEPATH,"/"),""),
                 file = str_replace_all(file, ".xlsx",""))
 
 
-# 2. import calibration files
+# 3. import calibration files ----
+
+# list all files in the calibration curve (cc) target directory
+# then read and collate
+
 CC_FILEPATH = "data/date1-cc/"
 cc_filePaths <- list.files(path = CC_FILEPATH,pattern = "*.xlsx", full.names = TRUE)
-
 
 cc_data <- do.call(rbind, lapply(cc_filePaths, function(path) {
     df <- read_excel(path) 
     df[["file"]] <- rep(path, nrow(df))
     df}))
 
-
-# clean the calib file and perform standard curve calculations 
-calib_2 = 
+#
+# 4. clean the calib file and perform standard curve calculations ----
+calibration = 
   cc_data %>%
   dplyr::mutate(file = str_replace_all(file, paste0(CC_FILEPATH,"/"),""),
                 file = str_replace_all(file, "-cc.xlsx","")) %>% 
@@ -66,41 +73,46 @@ calib_2 =
   dplyr::summarise(slope = lm(conc ~ mean)$coefficients["mean"],
                 intercept = lm(conc ~ mean)$coefficients["(Intercept)"])
 
-# SLOPE = mean(calib_2$slope)
-# INTERCEPT = mean(calib_2$intercept)
+#
 
-
-# 3. calculate concentrations using the standard curve
+# 5. calculate concentrations using the standard curve ----
 
 data_calc = 
   data_melt %>% 
   ungroup %>% 
-  left_join(calib_2, by = "file") %>% 
+# merge the calibration file
+# each row will be assigned a slope and intercept, which is unique for that run (`file` column)
+  left_join(calibration, by = "file") %>% 
   dplyr::mutate(conc_ng_uL = (slope * val)+ intercept,
                 conc_ng_uL = round(conc_ng_uL,4)) %>% 
-# calculate normalization volume
+# calculate normalization volume uL, as 240/concentration (ng/uL)
   dplyr::mutate(norm_uL = 240/conc_ng_uL,
                 norm_uL = round(norm_uL,0)) %>% 
 # select only the relevant columns
   dplyr::select(Source, file, norm_uL) %>% 
   rename(Volume = norm_uL) %>% 
-# add other columns
+# add other columns to match the instrument requirements
   dplyr::mutate(
     Rack.x = 1,
     Rack.y = 1,
     Destination = "A1",
     Tool = 1
-  ) %>% 
+  ) %>%
+# rearrange the columns to match the instrument requirements  
   dplyr::select(Rack.x, Source, Rack.y, Destination, Volume, Tool, file)
 
 
-# rename the "rack" columns. 
+# rename the `Rack*` columns. 
+# both `Rack*` columns need to be renamed to `Rack`, to match the instrument requirements
 # do this using base R, because dplyr doesn't like two columns with the same name
 names(data_calc)[names(data_calc) == "Rack.x"] = "Rack"
 names(data_calc)[names(data_calc) == "Rack.y"] = "Rack"
 
+#
+# 6. export ----
+# group by `file` column, each "file"/run must be saved separately
 
-
+# make a function, and then apply it to `data_calc`
 save_files <- function(data, group) {
   write.csv(data, file = file.path("processed", paste0(group$file, ".csv")), row.names = F)
 }
@@ -110,6 +122,4 @@ export =
   group_by(file) %>%
   group_walk(save_files)
 
-
-# 3. EXPORT
-# write.csv(data_calc, "processed/processed_data.csv", row.names = FALSE)
+###
