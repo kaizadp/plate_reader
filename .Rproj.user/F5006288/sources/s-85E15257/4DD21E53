@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1588961508780.000,
+    "dirty" : true,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "4DD21E53",
+    "lastKnownWriteTime" : 1590101634,
+    "last_content_update" : 1590101849832,
+    "path" : "~/OneDrive - PNNL/Documents/GitHub/Sarah/plate_reader/plate_reader.R",
+    "project_path" : "plate_reader.R",
+    "properties" : {
+        "cursorPosition" : "15,34",
+        "scrollLine" : "0",
+        "tempName" : "Untitled1"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
