@@ -7,19 +7,15 @@ library(dplyr)
 library(stringr)
 library(drake)
 
-plan = drake_plan(
 # 1. import data files
-  FILEPATH = "data/date1-data/",
-  filePaths <- list.files(path = FILEPATH,pattern = "*.xlsx", full.names = TRUE),
-
-  raw = target(process_directory(FILEPATH),
-                       trigger = trigger(change = list.files(FILEPATH, pattern = "xlsx$", recursive = TRUE))),
+FILEPATH = "data/date1-data/"
+filePaths <- list.files(path = FILEPATH,pattern = "*.xlsx", full.names = TRUE)
 
 
-  data <- do.call(rbind, lapply(filePaths, function(path) {
+data <- do.call(rbind, lapply(filePaths, function(path) {
     df <- read_excel(path) 
     df[["file"]] <- rep(path, nrow(df))
-    df})),
+    df}))
 
     # data = sapply(list.files(path = FILEPATH,pattern = "*.xlsx", full.names = TRUE),
     #               read_excel, simplify = FALSE) %>% bind_rows()
@@ -29,7 +25,7 @@ plan = drake_plan(
     
     # melt/gather the dataset
 
-  data_melt  = 
+data_melt  = 
     data %>% 
     rename(letter = `...1`) %>% 
     reshape2::melt(id = c("letter", "file"),
@@ -40,40 +36,47 @@ plan = drake_plan(
 #  rename(letter = `...1`) %>% 
   dplyr::mutate(Source = paste0(letter, num),
                 file = str_replace_all(file, paste0(FILEPATH,"/"),""),
-                file = str_replace_all(file, ".xlsx","")),
+                file = str_replace_all(file, ".xlsx",""))
 
 
-    # 2. import calibration files
-CC_FILEPATH = "data/date1-cc/",
+# 2. import calibration files
+CC_FILEPATH = "data/date1-cc/"
+cc_filePaths <- list.files(path = CC_FILEPATH,pattern = "*.xlsx", full.names = TRUE)
 
-calib = sapply(list.files(path = CC_FILEPATH,pattern = "*.xlsx", full.names = TRUE),
-              read_excel, simplify = FALSE) %>% bind_rows(),
+
+cc_data <- do.call(rbind, lapply(cc_filePaths, function(path) {
+    df <- read_excel(path) 
+    df[["file"]] <- rep(path, nrow(df))
+    df}))
+
 
 # clean the calib file and perform standard curve calculations 
 calib_2 = 
-  calib %>% 
-  tidyr::gather(rep, val, 2:3) %>% 
+  cc_data %>%
+  dplyr::mutate(file = str_replace_all(file, paste0(CC_FILEPATH,"/"),""),
+                file = str_replace_all(file, "-cc.xlsx","")) %>% 
+  tidyr::gather(rep, val, rep1:rep2) %>% 
   # calculate mean
-  group_by(conc) %>% 
+  group_by(file, conc) %>% 
   dplyr::summarise(mean = mean(val)) %>% 
   # do standard curve, y = mx+b
   na.omit() %>% 
   ungroup %>% 
-  dplyr::mutate(slope = lm(conc ~ mean)$coefficients["mean"],
-                intercept = lm(conc ~ mean)$coefficients["(Intercept)"]),
+  group_by(file) %>% 
+  dplyr::summarise(slope = lm(conc ~ mean)$coefficients["mean"],
+                intercept = lm(conc ~ mean)$coefficients["(Intercept)"])
 
-SLOPE = mean(calib_2$slope),
-INTERCEPT = mean(calib_2$intercept)
-)
+# SLOPE = mean(calib_2$slope)
+# INTERCEPT = mean(calib_2$intercept)
 
-
-,
 
 # 3. calculate concentrations using the standard curve
 
 data_calc = 
   data_melt %>% 
-  dplyr::mutate(conc_ng_uL = (SLOPE * val)+ INTERCEPT,
+  ungroup %>% 
+  left_join(calib_2, by = "file") %>% 
+  dplyr::mutate(conc_ng_uL = (slope * val)+ intercept,
                 conc_ng_uL = round(conc_ng_uL,4)) %>% 
 # calculate normalization volume
   dplyr::mutate(norm_uL = 240/conc_ng_uL,
@@ -93,24 +96,20 @@ data_calc =
 
 # rename the "rack" columns. 
 # do this using base R, because dplyr doesn't like two columns with the same name
-names(data_calc)[names(data_calc) == "Rack.x"] = "Rack",
+names(data_calc)[names(data_calc) == "Rack.x"] = "Rack"
 names(data_calc)[names(data_calc) == "Rack.y"] = "Rack"
 
-)
-,
+
 
 save_files <- function(data, group) {
   write.csv(data, file = file.path("processed", paste0(group$file, ".csv")), row.names = F)
 }
 
-data_calc %>%
+export = 
+  data_calc %>%
   group_by(file) %>%
   group_walk(save_files)
 
-)
-
-
-
 
 # 3. EXPORT
-write.csv(data_calc, "processed/processed_data.csv", row.names = FALSE)
+# write.csv(data_calc, "processed/processed_data.csv", row.names = FALSE)
