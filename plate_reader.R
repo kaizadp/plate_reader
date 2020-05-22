@@ -19,6 +19,24 @@ data <- do.call(rbind, lapply(filePaths, function(path) {
     df[["file"]] <- rep(path, nrow(df))
     df}))
 
+PROCESSEDPATH = "processed/"
+processedPaths <- list.files(path = PROCESSEDPATH,pattern = "*.csv", full.names = TRUE)
+
+# identify only the new files
+# do this by comparing the files in the data folder and the files in the processed folder, and see which are new
+# first, remove unnecessary strings from data files and processed files, so we can compare
+files_removestr = str_remove_all(filePaths, paste0(FILEPATH,"/")) %>%  str_remove_all(".xlsx")
+processed_removestr = str_remove_all(processedPaths, paste0(PROCESSEDPATH,"/"))%>%  str_remove_all(".csv")
+# then compare
+new_files = setdiff(files_removestr, processed_removestr) %>% paste0(FILEPATH,"/",.,".xlsx")
+
+# now run the code on the new data
+newdata <- do.call(rbind, lapply(new_files, function(path) {
+    df <- read_excel(path) 
+    df[["file"]] <- rep(path, nrow(df))
+    df}))
+
+
     # data = sapply(list.files(path = FILEPATH,pattern = "*.xlsx", full.names = TRUE),
     #               read_excel, simplify = FALSE) %>% bind_rows()
 
@@ -32,7 +50,7 @@ data <- do.call(rbind, lapply(filePaths, function(path) {
 # melt all the numbers into a single column
 
 data_melt  = 
-    data %>% 
+    newdata %>% 
     rename(letter = `...1`) %>% 
     reshape2::melt(id = c("letter", "file"),
                  variable.name = "num",
