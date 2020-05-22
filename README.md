@@ -11,3 +11,6 @@ Processed files will be saved as `.xlsx` files in the `processed` folder.
 Do **not** delete files from this folder once completed.  
 
 The script will identify and run only the newly added files, by comparing the input and processed files.
+
+### TO RUN
+Open the processing script and click `Source`. The code will do the rest.
